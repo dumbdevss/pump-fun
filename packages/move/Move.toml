@@ -4,11 +4,8 @@ version = "1.0.0"
 authors = ["Taiwo Triumphant"]
 upgrade_policy="compatible"
 
-
 [dependencies]
 AptosFramework = { git = "https://github.com/movementlabsxyz/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "movement" }
 
-
-
 [addresses]
-pump_fun = "0x75aa8092b2c6b021bf95d60d8e8ddcfb9ea69e35e0ca722911ae4ad52cd46ebf"
+pump_fun = "0x3225fcf505c1c418063278d0ff64197464c30a2fa0c0d67412d6c47f5e2a9a67"
