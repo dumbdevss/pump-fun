@@ -10,19 +10,14 @@ module pump_fun::pump_for_fun {
     use aptos_framework::aptos_coin::{Self, AptosCoin};
     use aptos_framework::account::{Self, SignerCapability};
     use aptos_framework::timestamp;
-    // use pyth::pyth;
-    // use pyth::i64;
-    // use aptos_std::math64::pow;
-    // use pyth::price::{Self, Price};
-    // use pyth::price_identifier;
 
     // Constants
-    const DECIMAL: u8 = 8;
-    const MAX_SUPPLY: u64 = 1000000000;
-    const FEE: u64 = 4_000_000; // 0.4 APT
-    const MOVE_DECIMALS: u8 = 8;
-    const MOVE_MULTIPLIER: u64 = 100000000; // 10^8 for APT decimals
-    const OCTAS_PER_MOVE: u64 = 100000000;
+    const DECIMAL: u8 = 8; // Token decimals (10^8 smallest units per token)
+    const MAX_SUPPLY: u64 = 1_000_000_000; // 1 billion whole tokens
+    const FEE: u64 = 4_000_000; // 0.04 APT (4,000,000 octas)
+    const MOVE_DECIMALS: u8 = 8; // APT decimals
+    const MOVE_MULTIPLIER: u64 = 100_000_000; // 10^8 for APT decimals
+    const OCTAS_PER_MOVE: u64 = 100_000_000; // 10^8 octas per APT
 
     // Error codes
     const INSUFFICIENT_LIQUIDITY: u64 = 1;
@@ -35,6 +30,7 @@ module pump_fun::pump_for_fun {
     const ERR_ACCOUNT_NOT_REGISTERED: u64 = 8;
     const ERR_INVALID_PRICE: u64 = 9;
     const ERR_TOKEN_NOT_FOUND: u64 = 10;
+    const ERR_POOL_NOT_FOUND: u64 = 11;
 
     /// Global configuration for the pump_fun module
     struct AppConfig has key {
@@ -55,6 +51,7 @@ module pump_fun::pump_for_fun {
         history: vector<History>,
         timestamp: u64,
         token_addr: address, // Address of the token object
+        pool_addr: address
     }
 
     /// Transaction history entry
@@ -98,6 +95,11 @@ module pump_fun::pump_for_fun {
         });
     }
 
+    /// Check if a liquidity pool exists for a token
+    fun pool_exists(pool_addr: address): bool {
+        exists<LiquidityPool>(pool_addr)
+    }
+
     /// Record transaction history with USD values
     fun record_history(
         token_addr: address,
@@ -109,7 +111,8 @@ module pump_fun::pump_for_fun {
         let token = borrow_global_mut<Token>(token_addr);
         let token_id = token.id;
 
-        let price_in_move_coin = (MOVE_MULTIPLIER * 1); // 1 MOVE in USD
+        // TODO: Replace with real price oracle (e.g., Pyth) for accurate USD conversion
+        let price_in_move_coin = 1; // Placeholder: 1 APT = 1 USD
         assert!(price_in_move_coin > 0, ERR_INVALID_PRICE);
 
         let amount_in_usd = if (move_amount > 0) {
@@ -147,7 +150,7 @@ module pump_fun::pump_for_fun {
         icon_uri: string::String,
         project_url: string::String,
         initial_move_amount: u64
-    ) acquires AppConfig, FAController {
+    ) acquires AppConfig, FAController, Token {
         assert!(initial_move_amount > 0, ERR_ZERO_AMOUNT);
 
         let app_config = borrow_global_mut<AppConfig>(@pump_fun);
@@ -157,16 +160,17 @@ module pump_fun::pump_for_fun {
         let fee_coins = coin::withdraw<AptosCoin>(sender, app_config.fees);
         coin::deposit<AptosCoin>(admin_addr, fee_coins);
 
+        // Create token object
         let constructor_ref = object::create_named_object(sender, *string::bytes(&name));
         let object_signer = object::generate_signer(&constructor_ref);
         let token_addr = signer::address_of(&object_signer);
 
-        assert!(!vector::contains(&app_config.token_addresses, &token_addr), ERR_TOKEN_EXISTS);
         vector::push_back(&mut app_config.token_addresses, token_addr);
 
+        // Create fungible asset with max supply of 1 billion tokens (10^17 smallest units)
         primary_fungible_store::create_primary_store_enabled_fungible_asset(
             &constructor_ref,
-            option::some(((MAX_SUPPLY * MOVE_MULTIPLIER) as u128)),
+            option::some(((MAX_SUPPLY as u128) * (MOVE_MULTIPLIER as u128))),
             name,
             symbol,
             DECIMAL,
@@ -176,6 +180,7 @@ module pump_fun::pump_for_fun {
 
         let fa_obj = object::object_from_constructor_ref<Metadata>(&constructor_ref);
 
+        // Store token metadata
         let token_id = vector::length(&app_config.tokens);
         let token = Token {
             id: token_id,
@@ -186,11 +191,12 @@ module pump_fun::pump_for_fun {
             history: vector::empty<History>(),
             timestamp: timestamp::now_microseconds(),
             token_addr,
+            pool_addr: @0x0
         };
         move_to(&object_signer, token);
-
         vector::push_back(&mut app_config.tokens, token);
 
+        // Store fungible asset controller
         move_to(&object_signer, FAController {
             dev_address: sender_addr,
             mint_ref: fungible_asset::generate_mint_ref(&constructor_ref),
@@ -198,12 +204,15 @@ module pump_fun::pump_for_fun {
             transfer_ref: fungible_asset::generate_transfer_ref(&constructor_ref),
         });
 
+        // Mint 50 million tokens to creator (50_000_000 * 10^8 = 5_000_000_000_000_000 smallest units)
         let creator_amount = (MAX_SUPPLY * MOVE_MULTIPLIER) / 20;
         mint_tokens(sender, fa_obj, creator_amount);
 
+        // Mint 950 million tokens to liquidity pool (950_000_000 * 10^8 = 95_000_000_000_000_000 smallest units)
         let pool_token_amount = ((((MAX_SUPPLY * MOVE_MULTIPLIER) - creator_amount)) as u128);
         assert!(((creator_amount as u128) + pool_token_amount) <= ((MAX_SUPPLY * MOVE_MULTIPLIER) as u128), ERR_MAX_SUPPLY_EXCEEDED);
 
+        // Initialize liquidity pool
         initialize_liquidity_pool(fa_obj, initial_move_amount, (pool_token_amount as u64), object_signer, sender);
     }
 
@@ -215,9 +224,8 @@ module pump_fun::pump_for_fun {
     ) acquires LiquidityPool, Token, AppConfig {
         assert!(move_amount > 0, ERR_ZERO_AMOUNT);
         let token = borrow_global<Token>(token_addr); // Verify token exists
-        let metadata = object::address_to_object<Metadata>(token_addr);
-
-        let pool_addr = object::object_address(&metadata);
+        let pool_addr = account::create_resource_address(&token.token_addr, b"Liquidity_Pool");
+        assert!(pool_exists(pool_addr), ERR_POOL_NOT_FOUND);
         let lp = borrow_global_mut<LiquidityPool>(pool_addr);
 
         let token_out = get_output_amount(move_amount, lp.move_reserve, lp.token_reserve);
@@ -240,7 +248,7 @@ module pump_fun::pump_for_fun {
         lp.token_reserve = lp.token_reserve - token_out;
 
         record_history(
-            pool_addr,
+            token_addr,
             move_amount,
             token_out,
             sender_addr,
@@ -267,10 +275,14 @@ module pump_fun::pump_for_fun {
         token_amount: u64,
         token_signer: signer,
         sender: &signer
-    ) acquires FAController {
+    ) acquires FAController, Token {
         let (pool_signer, signer_cap) = account::create_resource_account(&token_signer, b"Liquidity_Pool");
         let pool_addr = signer::address_of(&pool_signer);
 
+        let token_address = signer::address_of(&token_signer);
+
+        let token_data = borrow_global_mut<Token>(token_address);
+        token_data.pool_addr = pool_addr;
         if (!coin::is_account_registered<AptosCoin>(pool_addr)) {
             coin::register<AptosCoin>(&pool_signer);
         };
@@ -296,7 +308,8 @@ module pump_fun::pump_for_fun {
     ) acquires LiquidityPool, Token, AppConfig {
         assert!(move_amount > 0, ERR_ZERO_AMOUNT);
         let token = borrow_global<Token>(token_addr); // Verify token exists
-        let pool_addr = account::create_resource_address(token.token_addr, b"Liquidity_Pool");
+        let pool_addr = token.pool_addr;
+        assert!(pool_exists(pool_addr), ERR_POOL_NOT_FOUND);
         let lp = borrow_global_mut<LiquidityPool>(pool_addr);
 
         let token_out = get_output_amount(move_amount, lp.move_reserve, lp.token_reserve);
@@ -314,11 +327,12 @@ module pump_fun::pump_for_fun {
             sender_addr,
             token_out
         );
+
         lp.move_reserve = lp.move_reserve + move_amount;
         lp.token_reserve = lp.token_reserve - token_out;
 
         record_history(
-            pool_addr,
+            token_addr,
             move_amount,
             token_out,
             sender_addr,
@@ -330,11 +344,12 @@ module pump_fun::pump_for_fun {
     public entry fun swap_token_to_move(
         sender: &signer,
         token_addr: address,
-        token_amount: u64,
+        token_amount: u64
     ) acquires LiquidityPool, Token, AppConfig {
         assert!(token_amount > 0, ERR_ZERO_AMOUNT);
         let token = borrow_global<Token>(token_addr); // Verify token exists
-        let pool_addr = account::create_resource_address(token.token_addr, b"Liquidity_Pool");
+        let pool_addr = token.pool_addr;
+        assert!(pool_exists(pool_addr), ERR_POOL_NOT_FOUND);
         let lp = borrow_global_mut<LiquidityPool>(pool_addr);
 
         let move_out = get_output_amount(token_amount, lp.token_reserve, lp.move_reserve);
@@ -349,7 +364,7 @@ module pump_fun::pump_for_fun {
         lp.move_reserve = lp.move_reserve - move_out;
 
         record_history(
-            pool_addr,
+            token_addr,
             move_out,
             token_amount,
             pool_addr,
@@ -397,15 +412,16 @@ module pump_fun::pump_for_fun {
         app_config.fees = new_fee;
     }
 
-    /// Calculate output amount for a swap
+    /// Calculate output amount for a swap (0.3% fee)
     fun get_output_amount(
         input_amount: u64,
         input_reserve: u64,
         output_reserve: u64
     ): u64 {
+        // Note: Casting to u64 may truncate fractional amounts
         let input_amount_with_fee = (input_amount as u128) * 997; // 0.3% fee
         let numerator = input_amount_with_fee * (output_reserve as u128);
-        let denominator = (input_reserve as u128) * 1000 + input_amount_with_fee;
+        let denominator = ((input_reserve as u128) * 1000 ) + input_amount_with_fee;
         ((numerator / denominator) as u64)
     }
 
@@ -416,8 +432,8 @@ module pump_fun::pump_for_fun {
         token_addr: address
     ): u64 acquires LiquidityPool, Token {
         let token = borrow_global<Token>(token_addr); // Verify token exists
-        let metadata = object::address_to_object<Metadata>(token_addr);
-        let pool_addr = object::object_address(&metadata);
+        let pool_addr = token.pool_addr;
+        assert!(pool_exists(pool_addr), ERR_POOL_NOT_FOUND);
         let lp = borrow_global<LiquidityPool>(pool_addr);
         get_output_amount(move_amount, lp.move_reserve, lp.token_reserve)
     }
@@ -429,8 +445,8 @@ module pump_fun::pump_for_fun {
         token_addr: address
     ): u64 acquires LiquidityPool, Token {
         let token = borrow_global<Token>(token_addr); // Verify token exists
-        let metadata = object::address_to_object<Metadata>(token_addr);
-        let pool_addr = object::object_address(&metadata);
+        let pool_addr = token.pool_addr;
+        assert!(pool_exists(pool_addr), ERR_POOL_NOT_FOUND);
         let lp = borrow_global<LiquidityPool>(pool_addr);
         get_output_amount(token_amount, lp.token_reserve, lp.move_reserve)
     }
@@ -439,8 +455,8 @@ module pump_fun::pump_for_fun {
     #[view]
     public fun get_pool_info(token_addr: address): (u64, u64) acquires LiquidityPool, Token {
         let token = borrow_global<Token>(token_addr); // Verify token exists
-        let metadata = object::address_to_object<Metadata>(token_addr);
-        let pool_addr = object::object_address(&metadata);
+        let pool_addr = token.pool_addr;
+        assert!(pool_exists(pool_addr), ERR_POOL_NOT_FOUND);
         let lp = borrow_global<LiquidityPool>(pool_addr);
         (lp.token_reserve, lp.move_reserve)
     }
