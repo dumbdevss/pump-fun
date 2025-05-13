@@ -10,6 +10,10 @@ module pump_fun::pump_for_fun {
     use aptos_framework::aptos_coin::{Self, AptosCoin};
     use aptos_framework::account::{Self, SignerCapability};
     use aptos_framework::timestamp;
+    use pyth::pyth;
+    use pyth::i64;
+    use pyth::price::{Self, Price};
+    use pyth::price_identifier;
 
     // Constants
     const DECIMAL: u8 = 8; // Token decimals (10^8 smallest units per token)
@@ -410,6 +414,17 @@ module pump_fun::pump_for_fun {
         let sender_addr = signer::address_of(sender);
         assert!(sender_addr == app_config.admin, ERR_NOT_ADMIN);
         app_config.fees = new_fee;
+    }
+
+    fun get_move_price (): u64 {
+        let move_price_identifier = x"ee0c08f6b500a5933e95f75169dcd8910d9ff8d4acc6d07c9f577113a2387b9c";
+        let move_usd_price_id = price_identifier::from_byte_vec(move_price_identifier);
+        let price_info = pyth::get_price(move_usd_price_id);
+
+        let price_positive = i64::get_magnitude_if_positive(&price::get_price(&price_info));
+        let expo_magnitude = i64::get_magnitude_if_negative(&price::get_expo(&price_info));
+
+        price_positive
     }
 
     /// Calculate output amount for a swap (0.3% fee)
