@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from '~~/components/ui/toaster'
+import ApolloWrapper from '~~/lib/apollo-wrapper'
 import { ScaffoldMoveAppWithProviders } from '~~/components/ScaffoldMoveAppWithProviders'
 
 export const metadata: Metadata = {
@@ -16,10 +17,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body><ScaffoldMoveAppWithProviders>
-        <Toaster />
-        {children}
-        </ScaffoldMoveAppWithProviders></body>
+      <body>
+        <ApolloWrapper>
+          <ScaffoldMoveAppWithProviders>
+            <Toaster />
+            {children}
+          </ScaffoldMoveAppWithProviders>
+        </ApolloWrapper>
+      </body>
     </html>
   )
 }

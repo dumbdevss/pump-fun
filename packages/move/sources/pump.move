@@ -10,14 +10,9 @@ module pump_fun::pump_for_fun {
     use aptos_framework::aptos_coin::{Self, AptosCoin};
     use aptos_framework::account::{Self, SignerCapability};
     use aptos_framework::timestamp;
-    use pyth::pyth;
-    use pyth::i64;
-    use pyth::price::{Self, Price};
-    use pyth::price_identifier;
 
     // Constants
     const DECIMAL: u8 = 8; // Token decimals (10^8 smallest units per token)
-    const MAX_SUPPLY: u64 = 1_000_000_000; // 1 billion whole tokens
     const FEE: u64 = 4_000_000; // 0.04 APT (4,000,000 octas)
     const MOVE_DECIMALS: u8 = 8; // APT decimals
     const MOVE_MULTIPLIER: u64 = 100_000_000; // 10^8 for APT decimals
@@ -51,7 +46,13 @@ module pump_fun::pump_for_fun {
         name: String,
         symbol: String,
         icon_uri: String,
+        supply: u64,
+        current_price: u64,
         project_url: String,
+        description: String,
+        telegram: option::Option<String>,
+        twitter: option::Option<String>,
+        discord: option::Option<String>,
         history: vector<History>,
         timestamp: u64,
         token_addr: address, // Address of the token object
@@ -62,6 +63,7 @@ module pump_fun::pump_for_fun {
     struct History has key, store, copy {
         move_amount: u64,
         token_amount: u64,
+        type: String,
         buyer: address,
         seller: address,
         timestamp: u64,
@@ -109,6 +111,7 @@ module pump_fun::pump_for_fun {
         token_addr: address,
         move_amount: u64,
         token_amount: u64,
+        type: String,
         buyer: address,
         seller: address
     ) acquires Token, AppConfig {
@@ -135,6 +138,7 @@ module pump_fun::pump_for_fun {
             token_amount,
             buyer,
             seller,
+            type,
             timestamp: timestamp::now_microseconds(),
             amount_in_usd,
             amount_out_usd,
@@ -142,8 +146,8 @@ module pump_fun::pump_for_fun {
         vector::push_back(&mut token.history, history_entry);
 
         let app_config = borrow_global_mut<AppConfig>(@pump_fun);
-        let token = vector::borrow_mut(&mut app_config.tokens, token_id);
-        vector::push_back(&mut token.history, history_entry);
+        let token_gotten = vector::borrow_mut(&mut app_config.tokens, token_id);
+        vector::push_back(&mut token_gotten.history, history_entry);
     }
 
     /// Create a new token with initial liquidity
@@ -151,6 +155,11 @@ module pump_fun::pump_for_fun {
         sender: &signer,
         name: string::String,
         symbol: string::String,
+        supply: u64,
+        description: string::String,
+        telegram: option::Option<string::String>,
+        twitter: option::Option<string::String>,
+        discord: option::Option<string::String>,
         icon_uri: string::String,
         project_url: string::String,
         initial_move_amount: u64
@@ -174,7 +183,7 @@ module pump_fun::pump_for_fun {
         // Create fungible asset with max supply of 1 billion tokens (10^17 smallest units)
         primary_fungible_store::create_primary_store_enabled_fungible_asset(
             &constructor_ref,
-            option::some(((MAX_SUPPLY as u128) * (MOVE_MULTIPLIER as u128))),
+            option::some(((supply as u128) * (MOVE_MULTIPLIER as u128))),
             name,
             symbol,
             DECIMAL,
@@ -184,22 +193,30 @@ module pump_fun::pump_for_fun {
 
         let fa_obj = object::object_from_constructor_ref<Metadata>(&constructor_ref);
 
+
+        let creator_amount = (supply * MOVE_MULTIPLIER) / 20;
+        let pool_token_amount = ((((supply * MOVE_MULTIPLIER) - creator_amount)) as u128);
         // Store token metadata
         let token_id = vector::length(&app_config.tokens);
+         let current_price = get_output_amount((MOVE_MULTIPLIER * MOVE_MULTIPLIER), (pool_token_amount as u64), initial_move_amount);
         let token = Token {
             id: token_id,
             name,
             symbol,
             icon_uri,
             project_url,
+            current_price,
+            description,
+            telegram,
+            twitter,
+            discord,
+            supply,
             history: vector::empty<History>(),
             timestamp: timestamp::now_microseconds(),
             token_addr,
             pool_addr: @0x0
         };
         move_to(&object_signer, token);
-        vector::push_back(&mut app_config.tokens, token);
-
         // Store fungible asset controller
         move_to(&object_signer, FAController {
             dev_address: sender_addr,
@@ -207,17 +224,16 @@ module pump_fun::pump_for_fun {
             burn_ref: fungible_asset::generate_burn_ref(&constructor_ref),
             transfer_ref: fungible_asset::generate_transfer_ref(&constructor_ref),
         });
+        vector::push_back(&mut app_config.tokens, token);
 
-        // Mint 50 million tokens to creator (50_000_000 * 10^8 = 5_000_000_000_000_000 smallest units)
-        let creator_amount = (MAX_SUPPLY * MOVE_MULTIPLIER) / 20;
         mint_tokens(sender, fa_obj, creator_amount);
 
         // Mint 950 million tokens to liquidity pool (950_000_000 * 10^8 = 95_000_000_000_000_000 smallest units)
-        let pool_token_amount = ((((MAX_SUPPLY * MOVE_MULTIPLIER) - creator_amount)) as u128);
-        assert!(((creator_amount as u128) + pool_token_amount) <= ((MAX_SUPPLY * MOVE_MULTIPLIER) as u128), ERR_MAX_SUPPLY_EXCEEDED);
+        assert!(((creator_amount as u128) + pool_token_amount) <= ((supply * MOVE_MULTIPLIER) as u128), ERR_MAX_SUPPLY_EXCEEDED);
 
         // Initialize liquidity pool
-        initialize_liquidity_pool(fa_obj, initial_move_amount, (pool_token_amount as u64), object_signer, sender);
+        initialize_liquidity_pool(fa_obj, initial_move_amount, (pool_token_amount as u64), &object_signer, sender);
+        
     }
 
     /// Buy tokens using APT
@@ -227,7 +243,7 @@ module pump_fun::pump_for_fun {
         move_amount: u64
     ) acquires LiquidityPool, Token, AppConfig {
         assert!(move_amount > 0, ERR_ZERO_AMOUNT);
-        let token = borrow_global<Token>(token_addr); // Verify token exists
+        let token = borrow_global_mut<Token>(token_addr); // Verify token exists
         let pool_addr = account::create_resource_address(&token.token_addr, b"Liquidity_Pool");
         assert!(pool_exists(pool_addr), ERR_POOL_NOT_FOUND);
         let lp = borrow_global_mut<LiquidityPool>(pool_addr);
@@ -251,10 +267,25 @@ module pump_fun::pump_for_fun {
         lp.move_reserve = lp.move_reserve + move_amount;
         lp.token_reserve = lp.token_reserve - token_out;
 
+        let current_price = get_output_amount(MOVE_MULTIPLIER, lp.token_reserve, lp.move_reserve);
+        token.current_price = current_price;
+        let app_config = borrow_global_mut<AppConfig>(@pump_fun);
+        let i = 0;
+        let len = vector::length(&app_config.tokens);
+        while (i < len) {
+            let t = vector::borrow_mut(&mut app_config.tokens, i);
+            if (t.token_addr == token.token_addr) {
+                t.current_price = current_price;
+                break
+            };
+            i = i + 1;
+        };
+
         record_history(
             token_addr,
             move_amount,
             token_out,
+            string::utf8(b"buy"),
             sender_addr,
             pool_addr
         );
@@ -277,13 +308,13 @@ module pump_fun::pump_for_fun {
         token: Object<Metadata>,
         move_amount: u64,
         token_amount: u64,
-        token_signer: signer,
+        token_signer: &signer,
         sender: &signer
     ) acquires FAController, Token {
-        let (pool_signer, signer_cap) = account::create_resource_account(&token_signer, b"Liquidity_Pool");
+        let (pool_signer, signer_cap) = account::create_resource_account(token_signer, b"Liquidity_Pool");
         let pool_addr = signer::address_of(&pool_signer);
 
-        let token_address = signer::address_of(&token_signer);
+        let token_address = signer::address_of(token_signer);
 
         let token_data = borrow_global_mut<Token>(token_address);
         token_data.pool_addr = pool_addr;
@@ -299,7 +330,7 @@ module pump_fun::pump_for_fun {
             token_reserve: token_amount,
             move_reserve: move_amount,
             token_address: token,
-            owner: signer::address_of(&token_signer),
+            owner: signer::address_of(token_signer),
             signer_cap,
         });
     }
@@ -311,7 +342,7 @@ module pump_fun::pump_for_fun {
         move_amount: u64
     ) acquires LiquidityPool, Token, AppConfig {
         assert!(move_amount > 0, ERR_ZERO_AMOUNT);
-        let token = borrow_global<Token>(token_addr); // Verify token exists
+        let token = borrow_global_mut<Token>(token_addr); // Verify token exists
         let pool_addr = token.pool_addr;
         assert!(pool_exists(pool_addr), ERR_POOL_NOT_FOUND);
         let lp = borrow_global_mut<LiquidityPool>(pool_addr);
@@ -335,10 +366,25 @@ module pump_fun::pump_for_fun {
         lp.move_reserve = lp.move_reserve + move_amount;
         lp.token_reserve = lp.token_reserve - token_out;
 
+        let current_price = get_output_amount((MOVE_MULTIPLIER * MOVE_MULTIPLIER), lp.token_reserve, lp.move_reserve);
+        token.current_price = current_price;
+        let app_config = borrow_global_mut<AppConfig>(@pump_fun);
+        let i = 0;
+        let len = vector::length(&app_config.tokens);
+        while (i < len) {
+            let t = vector::borrow_mut(&mut app_config.tokens, i);
+            if (t.token_addr == token.token_addr) {
+                t.current_price = current_price;
+                break
+            };
+            i = i + 1;
+        };
+
         record_history(
             token_addr,
             move_amount,
             token_out,
+            string::utf8(b"buy"),
             sender_addr,
             pool_addr
         );
@@ -351,7 +397,7 @@ module pump_fun::pump_for_fun {
         token_amount: u64
     ) acquires LiquidityPool, Token, AppConfig {
         assert!(token_amount > 0, ERR_ZERO_AMOUNT);
-        let token = borrow_global<Token>(token_addr); // Verify token exists
+        let token = borrow_global_mut<Token>(token_addr); // Verify token exists
         let pool_addr = token.pool_addr;
         assert!(pool_exists(pool_addr), ERR_POOL_NOT_FOUND);
         let lp = borrow_global_mut<LiquidityPool>(pool_addr);
@@ -367,10 +413,25 @@ module pump_fun::pump_for_fun {
         lp.token_reserve = lp.token_reserve + token_amount;
         lp.move_reserve = lp.move_reserve - move_out;
 
+        let current_price = get_output_amount((MOVE_MULTIPLIER * MOVE_MULTIPLIER), lp.token_reserve, lp.move_reserve);
+        token.current_price = current_price;
+        let app_config = borrow_global_mut<AppConfig>(@pump_fun);
+        let i = 0;
+        let len = vector::length(&app_config.tokens);
+        while (i < len) {
+            let t = vector::borrow_mut(&mut app_config.tokens, i);
+            if (t.token_addr == token.token_addr) {
+                t.current_price = current_price;
+                break
+            };
+            i = i + 1;
+        };
+
         record_history(
             token_addr,
             move_out,
             token_amount,
+            string::utf8(b"sell"),
             pool_addr,
             sender_addr
         );
@@ -414,17 +475,6 @@ module pump_fun::pump_for_fun {
         let sender_addr = signer::address_of(sender);
         assert!(sender_addr == app_config.admin, ERR_NOT_ADMIN);
         app_config.fees = new_fee;
-    }
-
-    fun get_move_price (): u64 {
-        let move_price_identifier = x"ee0c08f6b500a5933e95f75169dcd8910d9ff8d4acc6d07c9f577113a2387b9c";
-        let move_usd_price_id = price_identifier::from_byte_vec(move_price_identifier);
-        let price_info = pyth::get_price(move_usd_price_id);
-
-        let price_positive = i64::get_magnitude_if_positive(&price::get_price(&price_info));
-        let expo_magnitude = i64::get_magnitude_if_negative(&price::get_expo(&price_info));
-
-        price_positive
     }
 
     /// Calculate output amount for a swap (0.3% fee)
@@ -485,9 +535,9 @@ module pump_fun::pump_for_fun {
 
     /// View function to get all token addresses
     #[view]
-    public fun get_all_tokens(): vector<address> acquires AppConfig {
+    public fun get_all_tokens(): vector<Token> acquires AppConfig {
         let app_config = borrow_global<AppConfig>(@pump_fun);
-        app_config.token_addresses
+        app_config.tokens
     }
 
     /// View function to get token metadata
@@ -495,5 +545,11 @@ module pump_fun::pump_for_fun {
     public fun getMetadata(token_addr: address): Object<Metadata> acquires Token {
         let token = borrow_global<Token>(token_addr); // Verify token exists
         object::address_to_object<Metadata>(token_addr)
+    }
+
+     #[view]
+    public fun getAllHistory() :vector<History> acquires AppConfig {
+        let app_config = borrow_global<AppConfig>(@pump_fun);
+        app_config.history
     }
 }

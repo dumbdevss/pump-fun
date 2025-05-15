@@ -22,7 +22,6 @@ export const useGetAccountNativeBalance = (address?: string) => {
 
       try {
         const result = await aptosClient.getAccountAPTAmount({ accountAddress });
-
         setBalance(result);
       } catch (e) {
         setError(true);

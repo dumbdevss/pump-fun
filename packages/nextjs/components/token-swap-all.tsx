@@ -11,11 +11,11 @@ import { ArrowDown, RefreshCw, AlertCircle } from "lucide-react"
 import { useGetAccountNativeBalance } from "~~/hooks/scaffold-move"
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
 import type { Token } from "~~/types/token-types"
-import {conditionalFixed} from "~~/utils/helper"  
+import { conditionalFixed } from "~~/utils/helper"
+
 
 interface TokenSwapProps {
-  selectedToken?: Token | any;
-  tokens: Token[] | any[];
+  tokens: Token[];
   swapMoveToToken: (token_addr: string, move_amount: number) => Promise<void>;
   swapTokensToMove: (token_addr: string, token_amount: number) => Promise<void>;
 }
@@ -35,19 +35,19 @@ const GET_USER_TOKEN_BALANCE = gql`
   }
 `;
 
-export default function TokenSwap({ selectedToken, tokens, swapMoveToToken, swapTokensToMove }: TokenSwapProps) {
+export default function TokenSwapAll({ tokens, swapMoveToToken, swapTokensToMove }: TokenSwapProps) {
   const { account } = useWallet();
   const [isLoading, setIsLoading] = useState(false);
   const [fromToken, setFromToken] = useState("MOVE");
-  const [toToken, setToToken] = useState(selectedToken?.symbol || "");
-  const [fromAmount, setFromAmount] = useState("");
+  const [toToken, setToToken] = useState("");
+  const [fromAmount, setFromAmount] = useState<string>("");
   const [toAmount, setToAmount] = useState("");
   const [conversionRate, setConversionRate] = useState(0);
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const { balance } = useGetAccountNativeBalance(account?.address);
 
   // Get current token address based on selection
-  const currentTokenAddress = selectedToken?.token_addr || tokens.find(t => t.symbol === toToken)?.token_addr || "";
-
+  const currentTokenAddress = selectedToken?.token_addr || "";
 
   // Fetch selected token balance
   const { data: tokenBalanceData, loading: tokenBalanceLoading, refetch: refetchTokenBalance } = useQuery(GET_USER_TOKEN_BALANCE, {
@@ -65,31 +65,30 @@ export default function TokenSwap({ selectedToken, tokens, swapMoveToToken, swap
   const hasTokenBalance = tokenBalance > 0;
   const hasMoveBalance = moveBalance > 0;
 
+  // Set initial token when tokens are available
+  useEffect(() => {
+    if (tokens && tokens.length > 0 && !selectedToken) {
+      setSelectedToken(tokens[0]);
+      setToToken(tokens[0].symbol);
+    }
+  }, [tokens, selectedToken]);
+
   // Update conversion rate when token changes
   useEffect(() => {
     if (selectedToken) {
-      // This is just an example - in a real app, you'd fetch the actual rate from your API
       setConversionRate(parseFloat(selectedToken.current_price) / (1e8) || 1.0);
-    } else if (toToken) {
-      const token = tokens.find(t => t.symbol === toToken);
-      setConversionRate(parseFloat(token?.current_price) / (1e8) || 1.0);
     }
-  }, [selectedToken, toToken, tokens]);
+  }, [selectedToken, toToken, fromToken]);
 
-  // Set initial direction based on token availability
+  // Update selected token when toToken changes
   useEffect(() => {
-    if (selectedToken) {
-      // If we have a token balance, default to token -> MOVE
-      if (hasTokenBalance) {
-        setFromToken(selectedToken.symbol);
-        setToToken("MOVE");
-      } else if (hasMoveBalance) {
-        // Otherwise default to MOVE -> token
-        setFromToken("MOVE");
-        setToToken(selectedToken.symbol);
+    if (toToken && toToken !== "MOVE") {
+      const token = tokens.find(t => t.symbol === toToken);
+      if (token) {
+        setSelectedToken(token);
       }
     }
-  }, [selectedToken, hasTokenBalance, hasMoveBalance]);
+  }, [toToken, tokens]);
 
   const handleFromAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -110,7 +109,6 @@ export default function TokenSwap({ selectedToken, tokens, swapMoveToToken, swap
       setToAmount("");
     }
   };
-
 
   const handleSwitchTokens = () => {
     const tempFrom = fromToken;
@@ -162,11 +160,26 @@ export default function TokenSwap({ selectedToken, tokens, swapMoveToToken, swap
       // Calculate to amount
       let converted = 0;
       if (fromToken === "MOVE") {
-        converted = maxBalance / conversionRate;
+        converted = maxBalance / (conversionRate / 1e8);
       } else {
-        converted = maxBalance * conversionRate;
+        converted = maxBalance * (conversionRate / 1e8);
       }
       setToAmount(conditionalFixed(converted, 9));
+    }
+  };
+
+
+  const handleTokenChange = (value: string) => {
+    if (value === "MOVE") {
+      // If selecting MOVE
+      setToToken(value);
+    } else {
+      // If selecting another token
+      setToToken(value);
+      const token = tokens.find(t => t.symbol === value);
+      if (token) {
+        setSelectedToken(token);
+      }
     }
   };
 
@@ -232,10 +245,12 @@ export default function TokenSwap({ selectedToken, tokens, swapMoveToToken, swap
                   <SelectValue placeholder="Select token" />
                 </SelectTrigger>
                 <SelectContent>
-                  {hasMoveBalance && <SelectItem value="MOVE">MOVE</SelectItem>}
-                  {hasTokenBalance && selectedToken && (
-                    <SelectItem value={selectedToken.symbol}>{selectedToken.symbol}</SelectItem>
-                  )}
+                  <SelectItem value="MOVE">MOVE</SelectItem>
+                  {toToken == "MOVE" && tokens.map((token) => (
+                    <SelectItem key={token.token_addr} value={token.symbol}>
+                      {token.symbol}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Input
@@ -272,17 +287,19 @@ export default function TokenSwap({ selectedToken, tokens, swapMoveToToken, swap
             <div className="flex gap-2">
               <Select
                 value={toToken}
-                onValueChange={setToToken}
+                onValueChange={handleTokenChange}
                 disabled={isLoading}
               >
                 <SelectTrigger className="w-[120px] bg-white/5 border-white/10">
                   <SelectValue placeholder="Select token" />
                 </SelectTrigger>
                 <SelectContent>
-                  {moveBalance > 0 && <SelectItem value="MOVE">MOVE</SelectItem>}
-                  {selectedToken && (
-                    <SelectItem value={selectedToken.symbol}>{selectedToken.symbol}</SelectItem>
-                  )}
+                  <SelectItem value="MOVE">MOVE</SelectItem>
+                  {fromToken == "MOVE" && tokens.map((token) => (
+                    <SelectItem key={token.token_addr} value={token.symbol}>
+                      {token.symbol}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Input

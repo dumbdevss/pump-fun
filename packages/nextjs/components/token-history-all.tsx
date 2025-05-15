@@ -6,11 +6,10 @@ import { ArrowUpRight, ArrowDownRight } from "lucide-react"
 import { HistoryType } from "~~/types/history-types"
 
 interface TokenHistoryProps {
-  symbol: string | any
   histories: HistoryType[] | any[]
 }
 
-export default function TokenHistory({ symbol, histories }: TokenHistoryProps) {
+export default function AllTokenHistory({ histories }: TokenHistoryProps) {
   const [isLoading, setIsLoading] = useState(true)
 
   // Simulate loading state
@@ -95,7 +94,7 @@ export default function TokenHistory({ symbol, histories }: TokenHistoryProps) {
                 </div>
                 <div className="text-right">
                   <p className="font-medium">
-                    {conditionalFixed((history.token_amount / 1e8), 6)} {symbol}
+                    {conditionalFixed((history.token_amount / 1e8), 6)}
                   </p>
                   <p className="text-sm text-gray-400">
                     ${isBuy ?  conditionalFixed((history.amount_in_usd / 1e8), 6) : conditionalFixed((history.amount_out_usd / 1e8), 6)}

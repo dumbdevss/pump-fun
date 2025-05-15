@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Search, Plus, Rocket, History, ArrowRightLeft, Sparkles, TrendingUp } from "lucide-react"
 import { Button } from "~~/components/ui/button"
@@ -10,25 +10,32 @@ import { Avatar } from "~~/components/ui/avatar"
 import { Badge } from "~~/components/ui/badge"
 import TokenCreator from "~~/components/token-creator"
 import TokenSwap from "~~/components/token-swap"
+import TokenSwapAll from "~~/components/token-swap-all"
 import TokenHistory from "~~/components/token-history"
 import TokenHolders from "~~/components/token-holders"
+import AllTokenHistory from "~~/components/token-history-all"
 import TokenCard from "~~/components/token-card"
-import { mockTokens } from "~~/lib/mock-data"
 import { CustomConnectButton } from "~~/components/scaffold-move"
 import { useView } from "~~/hooks/scaffold-move/useView"
 import useSubmitTransaction from "~~/hooks/scaffold-move/useSubmitTransaction"
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
 import { useToast } from "~~/hooks/use-toast"
+import { useQuery, gql } from "@apollo/client"
+import { Token } from "~~/types/token-types"
+import { HistoryType } from "~~/types/history-types"
+import {conditionalFixed} from "~~/utils/helper"  
+
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("trending")
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [selectedToken, setSelectedToken] = useState(null)
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
   const [searchQuery, setSearchQuery] = useState("")
   const { submitTransaction, transactionInProcess } = useSubmitTransaction("pump_for_fun");
   const { account } = useWallet();
   const { toast } = useToast();
 
+  // Get all tokens
   const {
     data: tokensData,
     refetch: refreshTokensData,
@@ -36,44 +43,55 @@ export default function Home() {
     moduleName: "pump_for_fun",
     functionName: "get_all_tokens",
   })
-
   const {
-    data: tokenDataHistory,
-    refetch: refreshTokenData,
+    data: allHistoryData,
+    refetch: refreshAllHistoryData,
   } = useView({
     moduleName: "pump_for_fun",
-    functionName: "get_token_history",
+    functionName: "getAllHistory",
   })
 
-  const createToken = async (tokenName: string, tokenSymbol: string, tokenSupply: number) => {
+
+  const refinedTokenData: Token[] = useMemo(() => {
+    if (!tokensData || !tokensData[0]) return [];
+    return tokensData[0];
+  }, [tokensData])
+
+  const refinedAllHistoryData: HistoryType[] = useMemo(() => {
+    if (!allHistoryData || !allHistoryData[0]) return [];
+    return allHistoryData[0];
+  }, [allHistoryData])
+
+
+  const createToken = async (tokenName: string, tokenSymbol: string, icon_uri: string, project_uri: string, initial_liquidity: number, supply: string, description: string, telegram: string | null, twitter: string | null, discord: string | null) => {
     if (!account) {
       toast({
         title: "Please connect your wallet",
         description: "You need to connect your wallet to create a token",
         variant: "destructive",
       })
-      return
+      return null
     }
     try {
-      const response = await submitTransaction({
-        functionName: "create_token",
-        args: [tokenName, tokenSymbol, tokenSupply],
-      })
-      if (response) {
+      const response = await submitTransaction("create_token", [tokenName, tokenSymbol, parseInt(supply), description, telegram, twitter, discord, icon_uri, project_uri, initial_liquidity]);
+
+      if (response as any) {
         toast({
           title: "Token created successfully",
           description: `You have successfully created the token ${tokenName} (${tokenSymbol})`,
           variant: "default",
         })
         refreshTokensData()
+        return response;
       } else {
         toast({
           title: "Token creation failed",
           description: `There was an error creating the token ${tokenName} (${tokenSymbol})`,
           variant: "destructive",
         })
+        return null;
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Token creation failed",
         description: `There was an error creating the token ${tokenName} (${tokenSymbol}): ${error.message}`,
@@ -92,17 +110,14 @@ export default function Home() {
       return
     }
     try {
-      const response = await submitTransaction({
-        functionName: "swap_move_to_token",
-        args: [token_addr, token_amount],
-      })
-      if (response) {
+      const response = await submitTransaction("swap_token_to_move", [token_addr as `0x${string}`, token_amount]);
+      if (response as any) {
         toast({
           title: "Swap successful",
-          description: `You have successfully swapped tokens`,
+          description: `You have successfully swapped tokens to MOVE`,
           variant: "default",
         })
-        refreshTokenData()
+        refreshTokensData()
       } else {
         toast({
           title: "Swap failed",
@@ -110,7 +125,7 @@ export default function Home() {
           variant: "destructive",
         })
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Swap failed",
         description: `There was an error swapping tokens: ${error.message}`,
@@ -119,8 +134,7 @@ export default function Home() {
     }
   }
 
-
-  const swapMoveToToken = async (token_addr: any, move_amount) => {
+  const swapMoveToToken = async (token_addr: string, move_amount: number) => {
     if (!account) {
       toast({
         title: "Please connect your wallet",
@@ -130,17 +144,15 @@ export default function Home() {
       return
     }
     try {
-      const response = await submitTransaction({
-        functionName: "swap_move_to_token",
-        args: [token_addr, move_amount],
-      })
-      if (response) {
+      const response = await submitTransaction("swap_move_to_token", [token_addr as `0x${string}`, move_amount]);
+
+      if (response as any) {
         toast({
           title: "Swap successful",
-          description: `You have successfully swapped tokens`,
+          description: `You have successfully swapped MOVE to tokens`,
           variant: "default",
         })
-        refreshTokenData()
+        refreshTokensData()
       } else {
         toast({
           title: "Swap failed",
@@ -148,7 +160,7 @@ export default function Home() {
           variant: "destructive",
         })
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Swap failed",
         description: `There was an error swapping tokens: ${error.message}`,
@@ -157,14 +169,13 @@ export default function Home() {
     }
   }
 
-
-  const handleTokenClick = (token) => {
-    setSelectedToken(token)
-    swapTokens(token.id)
+  const handleTokenClick = (token: Token) => {
+    setSelectedToken(token);
   }
 
-  const filteredTokens = mockTokens.filter(
-    (token) =>
+
+  const filteredTokens: Token[] = refinedTokenData.filter(
+    (token: Token) =>
       token.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       token.symbol.toLowerCase().includes(searchQuery.toLowerCase()),
   )
@@ -204,7 +215,7 @@ export default function Home() {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 -z-1 container mx-auto px-4 py-6 flex flex-col">
+      <main className="flex-1 container mx-auto px-4 py-6 flex flex-col">
         {/* Search */}
         <div className="flex justify-center mb-8">
           <div className="relative max-w-md w-full">
@@ -258,7 +269,7 @@ export default function Home() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    onClick={() => setSelectedToken(token)}
+                    onClick={() => handleTokenClick(token)}
                   >
                     <TokenCard token={token} />
                   </motion.div>
@@ -269,7 +280,7 @@ export default function Home() {
             <TabsContent value="new">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredTokens
-                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .sort((a, b) => b.timestamp - a.timestamp)
                   .slice(0, 6)
                   .map((token, index) => (
                     <motion.div
@@ -277,7 +288,7 @@ export default function Home() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      onClick={() => setSelectedToken(token)}
+                      onClick={() => handleTokenClick(token)}
                     >
                       <TokenCard token={token} />
                     </motion.div>
@@ -286,11 +297,15 @@ export default function Home() {
             </TabsContent>
 
             <TabsContent value="swap">
-              <TokenSwap />
+              <TokenSwapAll 
+                tokens={refinedTokenData} 
+                swapMoveToToken={swapMoveToToken} 
+                swapTokensToMove={swapTokensToMove} 
+              />
             </TabsContent>
 
             <TabsContent value="history">
-              <TokenHistory />
+              <AllTokenHistory histories={refinedAllHistoryData as HistoryType[] || []} />
             </TabsContent>
           </Tabs>
         </div>
@@ -302,7 +317,7 @@ export default function Home() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80" onClick={() => setSelectedToken(null)}>
             <motion.div
               className="bg-gray-900 border border-purple-500/30 rounded-xl w-full max-w-2xl overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
               layoutId={`token-card-${selectedToken.id}`}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -312,7 +327,7 @@ export default function Home() {
                 <div className="p-6 border-b border-white/10">
                   <div className="flex items-center gap-4 mb-4">
                     <Avatar className="h-16 w-16 rounded-xl border-2 border-purple-500/50">
-                      <img src={selectedToken.image || "/placeholder.svg"} alt={selectedToken.name} />
+                      <img src={selectedToken.icon_uri || "/placeholder.svg"} alt={selectedToken.name} />
                     </Avatar>
                     <div>
                       <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -320,7 +335,7 @@ export default function Home() {
                         <Badge className="bg-purple-500">{selectedToken.symbol}</Badge>
                       </h2>
                       <p className="text-gray-400">
-                        Created {new Date(selectedToken.createdAt).toLocaleDateString()}
+                        Created {new Date(selectedToken.timestamp * 1000).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
@@ -344,17 +359,17 @@ export default function Home() {
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <h3 className="text-sm font-medium text-gray-400">Market Cap</h3>
-                          <p className="mt-1 text-xl font-bold">${selectedToken.marketCap.toLocaleString()}</p>
+                          <p className="mt-1 text-xl font-bold">${conditionalFixed((parseFloat(selectedToken.current_price) * parseInt(selectedToken.supply)) / (100000000 * 1e8), 6)}</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-400">Price</h3>
-                          <p className="mt-1 text-xl font-bold">${selectedToken.price.toFixed(6)}</p>
+                          <p className="mt-1 text-xl font-bold">${conditionalFixed(parseFloat(selectedToken.current_price) / (100000000 * 1e8), 9)}</p>
                         </div>
                         <div>
                           <h3 className="text-sm font-medium text-gray-400">Total Supply</h3>
-                          <p className="mt-1 text-xl font-bold">{selectedToken.totalSupply.toLocaleString()}</p>
+                          <p className="mt-1 text-xl font-bold">{selectedToken.supply.toLocaleString()}</p>
                         </div>
-                        <div>
+                        {/* <div>
                           <h3 className="text-sm font-medium text-gray-400">24h Change</h3>
                           <p
                             className={`mt-1 text-xl font-bold ${selectedToken.change24h > 0 ? "text-green-500" : "text-red-500"}`}
@@ -362,21 +377,26 @@ export default function Home() {
                             {selectedToken.change24h > 0 ? "+" : ""}
                             {selectedToken.change24h}%
                           </p>
-                        </div>
+                        </div> */}
                       </div>
                     </div>
                   </TabsContent>
 
                   <TabsContent value="swap">
-                    <TokenSwap selectedToken={selectedToken} />
+                    <TokenSwap 
+                      selectedToken={selectedToken} 
+                      tokens={refinedTokenData} 
+                      swapMoveToToken={swapMoveToToken} 
+                      swapTokensToMove={swapTokensToMove} 
+                    />
                   </TabsContent>
 
                   <TabsContent value="holders">
-                    <TokenHolders tokenId={selectedToken.id} />
+                    <TokenHolders token={selectedToken} />
                   </TabsContent>
 
                   <TabsContent value="transactions">
-                    <TokenHistory tokenId={selectedToken.id} />
+                    <TokenHistory symbol={selectedToken.symbol} histories={selectedToken.history || []} />
                   </TabsContent>
                 </div>
               </Tabs>
@@ -393,8 +413,8 @@ export default function Home() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-gray-900 border border-purple-500/30 rounded-xl w-full max-w-lg overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
+              className="bg-gray-900 border border-purple-500/30 rounded-xl w-full max-w-xl overflow-hidden"
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               <div className="flex flex-col">
                 <div className="p-6 border-b border-white/10">
@@ -403,7 +423,7 @@ export default function Home() {
                 </div>
 
                 <div className="p-6">
-                  <TokenCreator onClose={() => setShowCreateModal(false)} />
+                  <TokenCreator onClose={() => setShowCreateModal(false)} createToken={createToken} />
                 </div>
               </div>
             </motion.div>
