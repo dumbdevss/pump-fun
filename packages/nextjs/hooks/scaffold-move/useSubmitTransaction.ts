@@ -105,7 +105,7 @@ const useSubmitTransaction = <TModuleName extends ModuleName>(moduleName: TModul
       return responseOnError;
     };
 
-     const transactionResponse = await signAndSubmitTransactionCall(transaction);
+    const transactionResponse = await signAndSubmitTransactionCall(transaction);
     setTransactionResponse(transactionResponse);
 
     let responseMessage = transactionResponse as TransactionResponseOnSubmission;
