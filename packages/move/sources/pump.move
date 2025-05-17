@@ -11,88 +11,94 @@ module pump_fun::pump_for_fun {
     use aptos_framework::account::{Self, SignerCapability};
     use aptos_framework::timestamp;
 
-    // Constants
-    const DECIMAL: u8 = 8; // Token decimals (10^8 smallest units per token)
-    const FEE: u64 = 4_000_000; // 0.04 APT (4,000,000 octas)
-    const MOVE_DECIMALS: u8 = 8; // APT decimals
-    const MOVE_MULTIPLIER: u64 = 100_000_000; // 10^8 for APT decimals
-    const OCTAS_PER_MOVE: u64 = 100_000_000; // 10^8 octas per APT
+     // TODOs 1: set decimal, fee, move_decimals, move_multiplier
+    const DECIMAL: u8 = 0; // Token decimals (10^8 smallest units per token)
+    const FEE: u64 = 0; // 0.04 MOVE (4,000,000 octas)
+    const MOVE_DECIMALS: u8 = 0; // MOVE decimals
+    const MOVE_MULTIPLIER: u64 = 0; // 10^8 for MOVE decimals
 
-    // Error codes
-    const INSUFFICIENT_LIQUIDITY: u64 = 1;
-    const INVALID_AMOUNT: u64 = 2;
-    const ERR_NOT_OWNER: u64 = 3;
-    const ERR_ZERO_AMOUNT: u64 = 4;
-    const ERR_MAX_SUPPLY_EXCEEDED: u64 = 5;
-    const ERR_NOT_ADMIN: u64 = 6;
-    const ERR_TOKEN_EXISTS: u64 = 7;
-    const ERR_ACCOUNT_NOT_REGISTERED: u64 = 8;
-    const ERR_INVALID_PRICE: u64 = 9;
-    const ERR_TOKEN_NOT_FOUND: u64 = 10;
-    const ERR_POOL_NOT_FOUND: u64 = 11;
+     // TODOs 2: set the error codes. change the zero to the correct error codes you want to use
+    const INSUFFICIENT_LIQUIDITY: u64 = 0;
+    const INVALID_AMOUNT: u64 = 0;
+    const ERR_NOT_OWNER: u64 = 0;
+    const ERR_ZERO_AMOUNT: u64 = 0;
+    const ERR_MAX_SUPPLY_EXCEEDED: u64 = 0;
+    const ERR_NOT_ADMIN: u64 = 0;
+    const ERR_TOKEN_EXISTS: u64 = 0;
+    const ERR_ACCOUNT_NOT_REGISTERED: u64 = 0;
+    const ERR_INVALID_PRICE: u64 = 0;
+    const ERR_TOKEN_NOT_FOUND: u64 = 0;
+    const ERR_POOL_NOT_FOUND: u64 = 0;
 
-    /// Global configuration for the pump_fun module
+    // TODOs 3: set the AppConfig which includes the fees, admin address, transaction history, tokens, and token addresses
     struct AppConfig has key {
-        fees: u64,
-        admin: address,
-        history: vector<History>,
-        tokens: vector<Token>,
-        token_addresses: vector<address>, // Tracks all token addresses
     }
 
-    /// Represents a token with metadata and transaction history
+    /**
+    * TODOs 4: Defines the token data structure with detailed information
+    * 
+    * @id              Unique identifier for the token
+    * @name            Name of the token (e.g., "Ethereum")
+    * @symbol          Trading symbol of the token (e.g., "ETH")
+    * @icon_uri        URI pointing to the token's icon/logo
+    * @supply          Total supply of the token in circulation
+    * @current_price   Current market price of the token (can be in wei or other denomination)
+    * @project_url     Official website URL of the token project
+    * @description     Brief description of the token and its use case
+    * @telegram        Telegram group/channel link, this is optional
+    * @twitter         Twitter/X handle or URL, this is optional
+    * @discord         Discord server invite link, this is optional
+    * @history         Array of transaction history entries for the token
+    * @timestamp       Timestamp of when token was created or last updated
+    * @token_addr      Contract address of the token
+    * @pool_addr       Address of the liquidity pool where the token is traded
+    */
     struct Token has key, store, copy {
         id: u64, // Unique identifier for the token
-        name: String,
-        symbol: String,
-        icon_uri: String,
-        supply: u64,
-        current_price: u64,
-        project_url: String,
-        description: String,
-        telegram: option::Option<String>,
-        twitter: option::Option<String>,
-        discord: option::Option<String>,
-        history: vector<History>,
-        timestamp: u64,
-        token_addr: address, // Address of the token object
-        pool_addr: address
     }
 
-    /// Transaction history entry
+    /**
+    * TODOs 5: Defines the transaction history data structure
+    *
+    * @move_amount     Amount of MOVE coins involved in the transaction
+    * @token_amount    Amount of tokens involved in the transaction
+    * @type           Type of transaction (e.g., "buy", "sell")
+    * @buyer          Address of the buyer in the transaction
+    * @seller         Address of the seller in the transaction
+    * @timestamp      Timestamp of when the transaction occurred
+    * @amount_in_usd  Amount in USD of input tokens
+    * @amount_out_usd Amount in USD of output tokens
+    **/
     struct History has key, store, copy {
-        move_amount: u64,
-        token_amount: u64,
-        type: String,
-        buyer: address,
-        seller: address,
-        timestamp: u64,
-        amount_in_usd: u64,
-        amount_out_usd: u64,
     }
 
     /// Controller for fungible asset operations
     #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
+    /** TODOs 6: set the fungible asset controller with mint, burn, and transfer references
+    *
+    * @dev_address    Address of the developer or creator of the token
+    * @mint_ref       Reference to the mint function of the fungible asset
+    * @burn_ref       Reference to the burn function of the fungible asset
+    * @transfer_ref   Reference to the transfer function of the fungible asset
+    **/
     struct FAController has key {
-        dev_address: address,
-        mint_ref: MintRef,
-        burn_ref: BurnRef,
-        transfer_ref: TransferRef,
     }
 
-    /// Liquidity pool for token-APT trading pair
+    /* TODOs 7: Defines the liquidity pool data structure
+    *
+    * @token_reserve  Amount of tokens in the liquidity pool
+    * @move_reserve   Amount of MOVE coins in the liquidity pool
+    * @token_address  token metadata object address Object<Metadata>
+    * @owner         Address of the owner of the liquidity pool
+    * @signer_cap    Signer capability for the liquidity pool
+    **/
     struct LiquidityPool has key {
-        token_reserve: u64,
-        move_reserve: u64,
-        token_address: Object<Metadata>,
-        owner: address,
-        signer_cap: SignerCapability,
     }
 
-    /// Initialize the module with admin configuration
+    /* TODOs 8: Intialize module and move AppConfig resources to contract address */
     fun init_module(sender: &signer) {
         let admin_addr = signer::address_of(sender);
-        move_to(sender, AppConfig {
+        move_to(sender, AppConfig { 
             fees: FEE,
             admin: admin_addr,
             history: vector::empty<History>(),
@@ -107,6 +113,7 @@ module pump_fun::pump_for_fun {
     }
 
     /// Record transaction history with USD values
+    /* TODOs 14 */
     fun record_history(
         token_addr: address,
         move_amount: u64,
@@ -150,37 +157,33 @@ module pump_fun::pump_for_fun {
         vector::push_back(&mut token_gotten.history, history_entry);
     }
 
-    /// Create a new token with initial liquidity
+    /* TODOs 11:  Creates a new token with the specified parameters
+
+    * @param sender The signer account creating the token
+    * @param name Name of the token (required)
+    * @param symbol Trading symbol of the token (required)
+    * @param supply Total supply of the token to be minted (required)
+    * @param description Brief description of the token and its purpose (required)
+    * @param telegram Telegram group/channel link (optional)
+    * @param twitter Twitter/X handle or URL (optional)
+    * @param discord Discord server invite link (optional)
+    * @param icon_uri URI pointing to the token's icon/logo (required)
+    * @param project_url Official website URL of the token project (required)
+    * @param initial_move_amount Amount of tokens to initially allocate (required)
+    */
     public entry fun create_token(
-        sender: &signer,
-        name: string::String,
-        symbol: string::String,
-        supply: u64,
-        description: string::String,
-        telegram: option::Option<string::String>,
-        twitter: option::Option<string::String>,
-        discord: option::Option<string::String>,
-        icon_uri: string::String,
-        project_url: string::String,
-        initial_move_amount: u64
     ) acquires AppConfig, FAController, Token {
+        // check if the initial_move_amount is greater than zero
         assert!(initial_move_amount > 0, ERR_ZERO_AMOUNT);
 
-        let app_config = borrow_global_mut<AppConfig>(@pump_fun);
-        let admin_addr = app_config.admin;
-        let sender_addr = signer::address_of(sender);
-        assert!(coin::is_account_registered<AptosCoin>(sender_addr), ERR_ACCOUNT_NOT_REGISTERED);
-        let fee_coins = coin::withdraw<AptosCoin>(sender, app_config.fees);
-        coin::deposit<AptosCoin>(admin_addr, fee_coins);
+        /* get mutable app_config state, check if user account is register for coin transaction and deposit
+        the Move coin to the admin_addr which is also the contract address */
 
-        // Create token object
-        let constructor_ref = object::create_named_object(sender, *string::bytes(&name));
-        let object_signer = object::generate_signer(&constructor_ref);
-        let token_addr = signer::address_of(&object_signer);
+        /* create constructor_ref and try to get the object signer and the address of the object signer */
 
+        /* add the address of the object signer created to the token_addresses of AppConfig state  */
         vector::push_back(&mut app_config.token_addresses, token_addr);
 
-        // Create fungible asset with max supply of 1 billion tokens (10^17 smallest units)
         primary_fungible_store::create_primary_store_enabled_fungible_asset(
             &constructor_ref,
             option::some(((supply as u128) * (MOVE_MULTIPLIER as u128))),
@@ -236,7 +239,7 @@ module pump_fun::pump_for_fun {
         
     }
 
-    /// Buy tokens using APT
+    /// TODOs 15
     public entry fun buy_token(
         sender: &signer,
         token_addr: address,
@@ -291,7 +294,7 @@ module pump_fun::pump_for_fun {
         );
     }
 
-    /// Mint tokens to an account
+    /* TODOs 12 */
     fun mint_tokens(
         account: &signer,
         token: Object<Metadata>,
@@ -303,7 +306,7 @@ module pump_fun::pump_for_fun {
         primary_fungible_store::deposit(signer::address_of(account), fa);
     }
 
-    /// Initialize a liquidity pool for a token
+    /* TODOs 13 */
     fun initialize_liquidity_pool(
         token: Object<Metadata>,
         move_amount: u64,
@@ -335,7 +338,8 @@ module pump_fun::pump_for_fun {
         });
     }
 
-    /// Swap APT for tokens
+     /* TODOs 16 */
+
     public entry fun swap_move_to_token(
         sender: &signer,
         token_addr: address,
@@ -390,7 +394,7 @@ module pump_fun::pump_for_fun {
         );
     }
 
-    /// Swap tokens for APT
+    /* TODOs 17 */
     public entry fun swap_token_to_move(
         sender: &signer,
         token_addr: address,
@@ -467,6 +471,7 @@ module pump_fun::pump_for_fun {
     }
 
     /// Update creation fee (admin only)
+    /* TODOs 18 */
     public entry fun update_fee(
         sender: &signer,
         new_fee: u64
@@ -478,6 +483,7 @@ module pump_fun::pump_for_fun {
     }
 
     /// Calculate output amount for a swap (0.3% fee)
+    /* TODOs 14 */
     fun get_output_amount(
         input_amount: u64,
         input_reserve: u64,
@@ -492,6 +498,7 @@ module pump_fun::pump_for_fun {
 
     /// View function to get token output amount
     #[view]
+    /* TODOs 19*/
     public fun get_token_output_amount(
         move_amount: u64,
         token_addr: address
@@ -505,6 +512,7 @@ module pump_fun::pump_for_fun {
 
     /// View function to get APT output amount
     #[view]
+    /* TODOs 20 */
     public fun get_move_output_amount(
         token_amount: u64,
         token_addr: address
@@ -518,6 +526,7 @@ module pump_fun::pump_for_fun {
 
     /// View function to get pool reserves
     #[view]
+    /* TODOs 21 */
     public fun get_pool_info(token_addr: address): (u64, u64) acquires LiquidityPool, Token {
         let token = borrow_global<Token>(token_addr); // Verify token exists
         let pool_addr = token.pool_addr;
@@ -535,6 +544,7 @@ module pump_fun::pump_for_fun {
 
     /// View function to get all token addresses
     #[view]
+    /* TODOs 22 */
     public fun get_all_tokens(): vector<Token> acquires AppConfig {
         let app_config = borrow_global<AppConfig>(@pump_fun);
         app_config.tokens
@@ -548,6 +558,7 @@ module pump_fun::pump_for_fun {
     }
 
      #[view]
+     /* TODOs 23 */
     public fun getAllHistory() :vector<History> acquires AppConfig {
         let app_config = borrow_global<AppConfig>(@pump_fun);
         app_config.history
