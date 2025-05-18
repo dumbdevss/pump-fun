@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
+import { useQuery, gql } from "@apollo/client"
 import { Button } from "~~/components/ui/button"
 import { Input } from "~~/components/ui/input"
 import { Label } from "~~/components/ui/label"
@@ -12,14 +13,27 @@ import { useWallet } from "@aptos-labs/wallet-adapter-react"
 import type { Token } from "~~/types/token-types"
 import { conditionalFixed } from "~~/utils/helper"
 
+
 interface TokenSwapProps {
   tokens: Token[];
   swapMoveToToken: (token_addr: string, move_amount: number) => Promise<void>;
   swapTokensToMove: (token_addr: string, token_amount: number) => Promise<void>;
 }
 
-// TODO 20: Define the GraphQL query to get the user's token balance
-const GET_USER_TOKEN_BALANCE = ""
+const GET_USER_TOKEN_BALANCE = gql`
+  query GetUserTokenBalance($owner_address: String!, $asset_type: String!) {
+    current_fungible_asset_balances(
+      where: {
+        owner_address: {_eq: $owner_address},
+        asset_type: {_eq: $asset_type}
+      }
+    ) {
+      asset_type
+      amount
+      last_transaction_timestamp
+    }
+  }
+`;
 
 export default function TokenSwapAll({ tokens, swapMoveToToken, swapTokensToMove }: TokenSwapProps) {
   const { account } = useWallet();
@@ -35,12 +49,15 @@ export default function TokenSwapAll({ tokens, swapMoveToToken, swapTokensToMove
   // Get current token address based on selection
   const currentTokenAddress = selectedToken?.token_addr || "";
 
-  // TODO 21: Implement useQuery hook to fetch selected token balance
-  const { data: tokenBalanceData, loading: tokenBalanceLoading, refetch: refetchTokenBalance } = {
-    data: null,
-    loading: false,
-    refetch: () => {}
-  };
+  // Fetch selected token balance
+  const { data: tokenBalanceData, loading: tokenBalanceLoading, refetch: refetchTokenBalance } = useQuery(GET_USER_TOKEN_BALANCE, {
+    variables: {
+      owner_address: account?.address || "",
+      asset_type: currentTokenAddress
+    },
+    skip: !account?.address || !currentTokenAddress,
+    fetchPolicy: "network-only"
+  });
 
   // Parse balances
   const moveBalance = (balance as number) / 1e8;
@@ -101,20 +118,31 @@ export default function TokenSwapAll({ tokens, swapMoveToToken, swapTokensToMove
     setToAmount("");
   };
 
-  // TODO 22: Implement handleSwap function
-  /*
   const handleSwap = async () => {
-    // 1. Check if fromAmount is valid and greater than 0
-    // 2. Set isLoading to true
-    // 3. Parse fromAmount to a number
-    // 4. If swapping MOVE to token, call swapMoveToToken with token address and amount
-    // 5. If swapping token to MOVE, call swapTokensToMove with token address and amount
-    // 6. Clear fromAmount and toAmount on success
-    // 7. Refetch token balance
-    // 8. Handle errors and log them
-    // 9. Set isLoading to false
-  }
-  */
+    if (!fromAmount || parseFloat(fromAmount) <= 0) return;
+
+    setIsLoading(true);
+    try {
+      const amount = parseFloat(fromAmount);
+
+      if (fromToken === "MOVE") {
+        // Swapping MOVE to token
+        await swapMoveToToken(currentTokenAddress, (amount * 1e8));
+      } else {
+        // Swapping token to MOVE
+        await swapTokensToMove(currentTokenAddress, (amount * 1e8));
+      }
+
+      // Clear form and refetch balances
+      setFromAmount("");
+      setToAmount("");
+      refetchTokenBalance();
+    } catch (error) {
+      console.error("Swap failed:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getMaxBalance = () => {
     if (fromToken === "MOVE") {
@@ -139,6 +167,7 @@ export default function TokenSwapAll({ tokens, swapMoveToToken, swapTokensToMove
       setToAmount(conditionalFixed(converted, 9));
     }
   };
+
 
   const handleTokenChange = (value: string) => {
     if (value === "MOVE") {
@@ -288,7 +317,7 @@ export default function TokenSwapAll({ tokens, swapMoveToToken, swapTokensToMove
 
         <div className="mt-6">
           <Button
-            onClick={() => {}} // TODO 23: Connect to handleSwap
+            onClick={handleSwap}
             disabled={!fromAmount || isLoading || parseFloat(fromAmount) <= 0}
             className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
           >

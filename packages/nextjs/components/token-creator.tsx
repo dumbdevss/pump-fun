@@ -34,10 +34,9 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const DECIMAL = 100000000;
-  // TODO 1: Set Pinata API key
-  const PINATA_API_KEY = ""
-  const PINATA_API_SECRET = ""
-  const PINATA_GATEWAY = ""
+  const PINATA_API_KEY = process.env.NEXT_PUBLIC_PINATA_API_KEY
+  const PINATA_API_SECRET = process.env.NEXT_PUBLIC_PINATA_API_SECRET
+  const PINATA_GATEWAY = process.env.NEXT_PUBLIC_PINATA_GATEWAY || "https://gateway.pinata.cloud/ipfs/"
 
   const [formData, setFormData] = useState({
     name: "",
@@ -51,52 +50,91 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
     initialLiquidity: "",
   })
 
-  // TODO 2: Implement handleChange function
-  /*
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    // 1. Get name and value from event target
-    // 2. Update formData state with new value
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
   }
-  */
 
-  // TODO 3: Implement handleImageChange function
-  /*
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // 1. Check if a file is selected
-    // 2. Create FormData and append the file
-    // 3. Upload file to Pinata IPFS using API key and secret
-    // 4. Get IPFS hash and construct file URL
-    // 5. Update imageFile and imagePreview states
-  }
-  */
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files?.[0]
+      if (file) {
+        // In a real implementation, you would upload this to IPFS or another storage
+        // and get back a URL. For now, we'll create a local object URL
+        const formData = new FormData()
+        formData.append("file", file)
 
-  // TODO 4: Implement handleSubmit function
-  /*
+        const response = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+          method: "POST",
+          headers: {
+            "pinata_api_key": PINATA_API_KEY || "",
+            "pinata_secret_api_key": PINATA_API_SECRET || "",
+          },
+          body: formData,
+        })
+
+        const data = await response.json()
+        const ipfsHash = data.IpfsHash;
+        const fileUrl = `${PINATA_GATEWAY}/ipfs/${ipfsHash}`;
+        setImageFile(file);
+        setImagePreview(fileUrl);
+      }
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
-    // 1. Prevent default form submission
-    // 2. Set isCreating to true
-    // 3. Call createToken with formData values
-    // 4. Set isSuccess to true on successful response
-    // 5. Handle errors and log them
-    // 6. Set isCreating to false
-  }
-  */
+    e.preventDefault()
+    setIsCreating(true)
 
-  // TODO 5: Implement closeModal function
-  /*
-  const closeModal = () => {
-    // 1. Reset formData to initial values
-    // 2. Clear imageFile and imagePreview
-    // 3. Reset step to 1
-    // 4. Set isSuccess to false
-    // 5. Call onClose prop
+    try {
+      // Call the createToken function with the required arguments
+      let response = await createToken(
+        formData.name,
+        formData.symbol,
+        imagePreview || "",  // icon_uri
+        formData.projectUrl, // project_uri
+        DECIMAL * parseFloat(formData.initialLiquidity), // initial_liquidity as number
+        formData.supply,
+        formData.description,
+        formData.telegram || null,
+        formData.twitter || null,
+        formData.discord || null
+      )
+
+      response && setIsSuccess(true);
+    } catch (error) {
+      console.error("Error creating token:", error)
+    } finally {
+      setIsCreating(false)
+
+    }
   }
-  */
+
+  const closeModal = () => {
+    // This function would be defined in the parent component
+    // We'll just reset the form for now
+    setFormData({
+      name: "",
+      symbol: "",
+      projectUrl: "",
+      description: "",
+      twitter: "",
+      discord: "",
+      telegram: "",
+      supply: "",
+      initialLiquidity: "",
+    })
+    setImageFile(null)
+    setImagePreview(null)
+    setStep(1)
+    setIsSuccess(false)
+    onClose()
+  }
 
   return (
     <div className="p-4 ">
       {!isSuccess ? (
-        <form onSubmit={() => {}} /* TODO 6: Connect to handleSubmit */>
+        <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             {step === 1 && (
               <motion.div
@@ -113,7 +151,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                       name="name"
                       placeholder="e.g. Moon Rocket"
                       value={formData.name}
-                      onChange={() => {}} /* TODO 7: Connect to handleChange */
+                      onChange={handleChange}
                       required
                       className="bg-white/5 border-white/10"
                     />
@@ -126,7 +164,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                       name="symbol"
                       placeholder="e.g. MOON"
                       value={formData.symbol}
-                      onChange={() => {}} /* TODO 41: Connect to handleChange */
+                      onChange={handleChange}
                       required
                       className="bg-white/5 border-white/10"
                       maxLength={10}
@@ -142,7 +180,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                     name="projectUrl"
                     placeholder="https://yourproject.com"
                     value={formData.projectUrl}
-                    onChange={() => {}} /* TODO 8: Connect to handleChange */
+                    onChange={handleChange}
                     className="bg-white/5 border-white/10"
                   />
                 </div>
@@ -154,7 +192,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                     name="description"
                     placeholder="Describe your token..."
                     value={formData.description}
-                    onChange={() => {}} /* TODO 9: Connect to handleChange */
+                    onChange={handleChange}
                     required
                     className="bg-white/5 border-white/10"
                     rows={3}
@@ -186,7 +224,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                             name="twitter"
                             placeholder="@username"
                             value={formData.twitter}
-                            onChange={() => {}} /* TODO 10: Connect to handleChange */
+                            onChange={handleChange}
                             className="bg-white/5 border-white/10"
                           />
                         </div>
@@ -198,7 +236,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                             name="discord"
                             placeholder="https://discord.gg/..."
                             value={formData.discord}
-                            onChange={() => {}} /* TODO 11: Connect to handleChange */
+                            onChange={handleChange}
                             className="bg-white/5 border-white/10"
                           />
                         </div>
@@ -211,7 +249,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                           name="telegram"
                           placeholder="https://t.me/..."
                           value={formData.telegram}
-                          onChange={() => {}} /* TODO 12: Connect to handleChange */
+                          onChange={handleChange}
                           className="bg-white/5 border-white/10"
                         />
                       </div>
@@ -246,7 +284,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                     type="text"
                     placeholder="e.g. 1000000"
                     value={formData.supply}
-                    onChange={() => {}} /* TODO 13: Connect to handleChange */
+                    onChange={handleChange}
                     required
                     className="bg-white/5 border-white/10"
                   />
@@ -261,7 +299,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                     step="0.01"
                     placeholder="e.g. 5.0"
                     value={formData.initialLiquidity}
-                    onChange={() => {}} /* TODO 14: Connect to handleChange */
+                    onChange={handleChange}
                     required
                     className="bg-white/5 border-white/10"
                   />
@@ -278,7 +316,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
                         name="image"
                         type="file"
                         accept="image/*"
-                        onChange={() => {}} /* TODO 15: Connect to handleImageChange */
+                        onChange={handleImageChange}
                         required
                         className="block w-full text-sm text-gray-400
                           file:mr-4 file:py-2 file:px-4
@@ -360,7 +398,7 @@ export default function TokenCreator({ createToken, onClose }: TokenCreatorProps
           <h3 className="text-xl font-bold mb-2">Token Created Successfully!</h3>
           <p className="text-gray-400 mb-6">Your token is now live on the blockchain</p>
           <Button
-            onClick={() => {}} /* TODO 16: Connect to closeModal */
+            onClick={closeModal}
             className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
           >
             View My Token
