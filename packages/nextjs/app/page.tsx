@@ -16,163 +16,90 @@ import TokenHolders from "~~/components/token-holders"
 import AllTokenHistory from "~~/components/token-history-all"
 import TokenCard from "~~/components/token-card"
 import { CustomConnectButton } from "~~/components/scaffold-move"
-import { useView } from "~~/hooks/scaffold-move/useView"
 import useSubmitTransaction from "~~/hooks/scaffold-move/useSubmitTransaction"
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
 import { useToast } from "~~/hooks/use-toast"
-import { useQuery, gql } from "@apollo/client"
 import { Token } from "~~/types/token-types"
 import { HistoryType } from "~~/types/history-types"
-import {conditionalFixed} from "~~/utils/helper"  
-
+import { conditionalFixed } from "~~/utils/helper"  
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("trending")
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const { submitTransaction, transactionInProcess } = useSubmitTransaction("pump_for_fun");
-  const { account } = useWallet();
-  const { toast } = useToast();
+  const { submitTransaction, transactionInProcess } = useSubmitTransaction("pump_for_fun")
+  const { account } = useWallet()
+  const { toast } = useToast()
 
-  // Get all tokens
+  // TODO 24: Implement useView hook for fetching all tokens
   const {
     data: tokensData,
     refetch: refreshTokensData,
-  } = useView({
-    moduleName: "pump_for_fun",
-    functionName: "get_all_tokens",
-  })
+  } = {
+    data: [[]],
+    refetch: () => {}
+  }
+
+  // TODO 25: Implement useView hook for fetching all history
   const {
     data: allHistoryData,
     refetch: refreshAllHistoryData,
-  } = useView({
-    moduleName: "pump_for_fun",
-    functionName: "getAllHistory",
-  })
-
+  } = {
+    data: [[]],
+    refetch: () => {}
+  }
 
   const refinedTokenData: Token[] = useMemo(() => {
-    if (!tokensData || !tokensData[0]) return [];
-    return tokensData[0];
+    if (!tokensData || !tokensData[0]) return []
+    return tokensData[0]
   }, [tokensData])
 
   const refinedAllHistoryData: HistoryType[] = useMemo(() => {
-    if (!allHistoryData || !allHistoryData[0]) return [];
-    return allHistoryData[0];
+    if (!allHistoryData || !allHistoryData[0]) return []
+    return allHistoryData[0]
   }, [allHistoryData])
 
-
+  // TODO 26: Implement createToken function
+  /*
   const createToken = async (tokenName: string, tokenSymbol: string, icon_uri: string, project_uri: string, initial_liquidity: number, supply: string, description: string, telegram: string | null, twitter: string | null, discord: string | null) => {
-    if (!account) {
-      toast({
-        title: "Please connect your wallet",
-        description: "You need to connect your wallet to create a token",
-        variant: "destructive",
-      })
-      return null
-    }
-    try {
-      const response = await submitTransaction("create_token", [tokenName, tokenSymbol, parseInt(supply), description, telegram, twitter, discord, icon_uri, project_uri, initial_liquidity]);
-
-      if (response as any) {
-        toast({
-          title: "Token created successfully",
-          description: `You have successfully created the token ${tokenName} (${tokenSymbol})`,
-          variant: "default",
-        })
-        refreshTokensData()
-        return response;
-      } else {
-        toast({
-          title: "Token creation failed",
-          description: `There was an error creating the token ${tokenName} (${tokenSymbol})`,
-          variant: "destructive",
-        })
-        return null;
-      }
-    } catch (error: any) {
-      toast({
-        title: "Token creation failed",
-        description: `There was an error creating the token ${tokenName} (${tokenSymbol}): ${error.message}`,
-        variant: "destructive",
-      })
-    }
+    // 1. Check if wallet is connected and show error toast if not
+    // 2. Submit transaction to create token with provided parameters
+    // 3. Show success toast on successful creation
+    // 4. Refresh token data
+    // 5. Handle errors and show error toast
+    // 6. Return response or null
   }
+  */
 
+  // TODO 27: Implement swapTokensToMove function
+  /*
   const swapTokensToMove = async (token_addr: string, token_amount: number) => {
-    if (!account) {
-      toast({
-        title: "Please connect your wallet",
-        description: "You need to connect your wallet to swap tokens",
-        variant: "destructive",
-      })
-      return
-    }
-    try {
-      const response = await submitTransaction("swap_token_to_move", [token_addr as `0x${string}`, token_amount]);
-      if (response as any) {
-        toast({
-          title: "Swap successful",
-          description: `You have successfully swapped tokens to MOVE`,
-          variant: "default",
-        })
-        refreshTokensData()
-      } else {
-        toast({
-          title: "Swap failed",
-          description: `There was an error swapping tokens`,
-          variant: "destructive",
-        })
-      }
-    } catch (error: any) {
-      toast({
-        title: "Swap failed",
-        description: `There was an error swapping tokens: ${error.message}`,
-        variant: "destructive",
-      })
-    }
+    // 1. Check if wallet is connected and show error toast if not
+    // 2. Submit transaction to swap tokens to MOVE
+    // 3. Show success toast on successful swap
+    // 4. Refresh token data
+    // 5. Handle errors and show error toast
   }
+  */
 
+  // TODO 28: Implement swapMoveToToken function
+  /*
   const swapMoveToToken = async (token_addr: string, move_amount: number) => {
-    if (!account) {
-      toast({
-        title: "Please connect your wallet",
-        description: "You need to connect your wallet to swap tokens",
-        variant: "destructive",
-      })
-      return
-    }
-    try {
-      const response = await submitTransaction("swap_move_to_token", [token_addr as `0x${string}`, move_amount]);
-
-      if (response as any) {
-        toast({
-          title: "Swap successful",
-          description: `You have successfully swapped MOVE to tokens`,
-          variant: "default",
-        })
-        refreshTokensData()
-      } else {
-        toast({
-          title: "Swap failed",
-          description: `There was an error swapping tokens`,
-          variant: "destructive",
-        })
-      }
-    } catch (error: any) {
-      toast({
-        title: "Swap failed",
-        description: `There was an error swapping tokens: ${error.message}`,
-        variant: "destructive",
-      })
-    }
+    // 1. Check if wallet is connected and show error toast if not
+    // 2. Submit transaction to swap MOVE to tokens
+    // 3. Show success toast on successful swap
+    // 4. Refresh token data
+    // 5. Handle errors and show error toast
   }
+  */
 
+  // TODO 29: Implement handleTokenClick function
+  /*
   const handleTokenClick = (token: Token) => {
-    setSelectedToken(token);
+    // 1. Set the selected token
   }
-
+  */
 
   const filteredTokens: Token[] = refinedTokenData.filter(
     (token: Token) =>
@@ -269,7 +196,7 @@ export default function Home() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    onClick={() => handleTokenClick(token)}
+                    onClick={() => {}} // TODO 30: Connect to handleTokenClick
                   >
                     <TokenCard token={token} />
                   </motion.div>
@@ -288,7 +215,7 @@ export default function Home() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      onClick={() => handleTokenClick(token)}
+                      onClick={() => {}} // TODO 31: Connect to handleTokenClick
                     >
                       <TokenCard token={token} />
                     </motion.div>
@@ -299,8 +226,8 @@ export default function Home() {
             <TabsContent value="swap">
               <TokenSwapAll 
                 tokens={refinedTokenData} 
-                swapMoveToToken={swapMoveToToken} 
-                swapTokensToMove={swapTokensToMove} 
+                swapMoveToToken={() => {}} // TODO 32: Pass swapMoveToToken
+                swapTokensToMove={() => {}} // TODO 33: Pass swapTokensToMove
               />
             </TabsContent>
 
@@ -369,15 +296,6 @@ export default function Home() {
                           <h3 className="text-sm font-medium text-gray-400">Total Supply</h3>
                           <p className="mt-1 text-xl font-bold">{selectedToken.supply.toLocaleString()}</p>
                         </div>
-                        {/* <div>
-                          <h3 className="text-sm font-medium text-gray-400">24h Change</h3>
-                          <p
-                            className={`mt-1 text-xl font-bold ${selectedToken.change24h > 0 ? "text-green-500" : "text-red-500"}`}
-                          >
-                            {selectedToken.change24h > 0 ? "+" : ""}
-                            {selectedToken.change24h}%
-                          </p>
-                        </div> */}
                       </div>
                     </div>
                   </TabsContent>
@@ -386,8 +304,8 @@ export default function Home() {
                     <TokenSwap 
                       selectedToken={selectedToken} 
                       tokens={refinedTokenData} 
-                      swapMoveToToken={swapMoveToToken} 
-                      swapTokensToMove={swapTokensToMove} 
+                      swapMoveToToken={() => {}} // TODO 34: Pass swapMoveToToken
+                      swapTokensToMove={() => {}} // TODO 35: Pass swapTokensToMove
                     />
                   </TabsContent>
 
@@ -423,7 +341,8 @@ export default function Home() {
                 </div>
 
                 <div className="p-6">
-                  <TokenCreator onClose={() => setShowCreateModal(false)} createToken={createToken} />
+                  <TokenCreator onClose={() => setShowCreateModal(false)} createToken={() => {}} // TODO 36: Pass createToken
+                  />
                 </div>
               </div>
             </motion.div>

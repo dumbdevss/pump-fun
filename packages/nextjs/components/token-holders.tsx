@@ -3,46 +3,35 @@
 import { useState } from "react"
 import { motion } from "framer-motion"
 import { Token } from "~~/types/token-types"
-import { useQuery, gql } from "@apollo/client"
 
 interface TokenHoldersProps {
   token?: Token | any
 }
 
-const GET_TOKEN_HOLDERS = gql`
-  query GetTokenHolders($assetType: String!) {
-    current_fungible_asset_balances(
-      where: {asset_type: {_eq: $assetType}, amount: {_gt: 0}}
-    ) {
-      owner_address
-      amount
-      last_transaction_timestamp
-      metadata {
-        creator_address
-      }
-    }
-  }
-`
+// TODO 17: Define the GraphQL query to get the holders of a token using the token address
+const GET_TOKEN_HOLDERS = ""
 
 export default function TokenHolders({ token }: TokenHoldersProps) {
   // Extract the token address from the token object, or use a fallback empty string
   const tokenAddress = token?.token_addr || ""
-  
-  // Use Apollo's useQuery hook to fetch data
-  const { loading, error, data } = useQuery(GET_TOKEN_HOLDERS, {
-    variables: { assetType: tokenAddress },
-    skip: !tokenAddress, // Skip the query if no token address is provided
-  })
 
-  // Process the data into the format we need
-  const holders = data?.current_fungible_asset_balances?.map((holder: any, index: number) => ({
-    id: index,
-    address: holder.owner_address,
-    amount: parseInt(holder.amount),
-    timestamp: holder.last_transaction_timestamp,
-  })) || []
+  // TODO 18: Implement useQuery hook to fetch token holders
+  const { loading, error, data } = {
+    loading: false,
+    error: null,
+    data: null
+  }
 
-  // Calculate total supply for percentage calculation
+  // TODO 19: Process the data into this format 
+  /*
+    id,
+    address,
+    amount,
+    timestamp, 
+  */
+ let holders: any[] = []
+
+  // TODO 19: Calculate total supply for percentage calculation
   const totalSupply = holders.reduce((sum: number, holder: any) => sum + holder.amount, 0)
 
   if (loading) {
